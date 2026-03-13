@@ -1,0 +1,349 @@
+<!doctype html>
+
+<html>
+  <head>
+    <title>CFG Analyzer</title>
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Poppins", sans-serif;
+      }
+
+      body {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .container {
+        background: white;
+        width: 700px;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        animation: fadeIn 1s ease;
+      }
+
+      h1 {
+        margin-bottom: 20px;
+        color: #333;
+      }
+
+      textarea {
+        width: 100%;
+        height: 130px;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        margin-bottom: 15px;
+      }
+
+      input {
+        width: 60%;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+      }
+
+      button {
+        margin-top: 10px;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        background: #667eea;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        transition: 0.3s;
+      }
+
+      button:hover {
+        background: #4e5ed3;
+        transform: scale(1.05);
+      }
+
+      #loader {
+        display: none;
+        margin: 20px;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 5px solid #ddd;
+        border-top: 5px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: auto;
+      }
+
+      #output {
+        margin-top: 20px;
+        text-align: left;
+      }
+
+      .resultCard {
+        background: #f4f6ff;
+        padding: 15px;
+        margin-top: 10px;
+        border-radius: 8px;
+        animation: slideUp 0.5s ease;
+      }
+
+      table {
+        border-collapse: collapse;
+        margin-top: 10px;
+        width: 100%;
+      }
+
+      th,
+      td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        text-align: center;
+      }
+
+      th {
+        background: #667eea;
+        color: white;
+      }
+
+      tr:nth-child(even) {
+        background: #f9f9ff;
+      }
+
+      tr:hover {
+        background: #eef1ff;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>Context Free Grammar Analyzer</h1>
+
+      <textarea
+        id="grammar"
+        placeholder="Example:
+S->AB
+A->aA|ε
+B->bB|b"
+      ></textarea>
+
+      <button onclick="analyze()">Analyze Grammar</button>
+
+      <br /><br />
+
+      <input id="inputString" placeholder="Enter string" />
+
+      <button onclick="validate()">Validate</button>
+
+      <div style="margin-top: 10px">
+        <button onclick="startAuto()">Auto Play</button>
+        <button onclick="nextStep()">Next Step</button>
+      </div>
+
+      <div id="loader">
+        <div class="spinner"></div>
+        <p>Analyzing Grammar...</p>
+      </div>
+
+      <div id="output"></div>
+    </div>
+
+    <script>
+      let parseSteps = [];
+      let stepIndex = 0;
+      let autoInterval = null;
+
+      function analyze() {
+  let grammar = document.getElementById("grammar").value;
+  let loader = document.getElementById("loader");
+  let output = document.getElementById("output");
+
+  loader.style.display = "block";
+  output.innerHTML = "";
+
+  fetch("/analyze", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ grammar: grammar }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+
+      loader.style.display = "none";
+
+      if (data.error) {
+        output.innerHTML = `<div class="resultCard" style="color:red">${data.error}</div>`;
+        return;
+      }
+
+      let html = "";
+
+      html += createCard("FIRST Sets", data.FIRST);
+      html += createCard("FOLLOW Sets", data.FOLLOW);
+
+      html += `
+<div class="resultCard">
+<b>Left Recursion:</b> ${
+        data.LEFT_RECURSION.length
+          ? data.LEFT_RECURSION.join(", ")
+          : "None"
+      }
+</div>`;
+
+      html += `
+<div class="resultCard">
+<b>Left Factoring:</b> ${
+        data.LEFT_FACTORING.length
+          ? data.LEFT_FACTORING.join(", ")
+          : "None"
+      }
+</div>`;
+
+      output.innerHTML = html;
+    })
+    .catch((err) => {
+      loader.style.display = "none";
+      output.innerHTML = `<div class="resultCard" style="color:red">Server Error</div>`;
+      console.error(err);
+    });
+}
+
+      function createCard(title, data) {
+        let html = `<div class="resultCard"><b>${title}</b><br>`;
+
+        for (let key in data) {
+          html += `${key} = { ${data[key].join(", ")} } <br>`;
+        }
+
+        html += "</div>";
+
+        return html;
+      }
+
+      function validate() {
+        let string = document.getElementById("inputString").value;
+
+        fetch("/validate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({ string: string }),
+        })
+          .then((res) => res.json())
+
+          .then((data) => {
+            parseSteps = data.steps;
+            stepIndex = 0;
+
+            createParsingTable();
+          });
+      }
+
+      function createParsingTable() {
+        let output = document.getElementById("output");
+
+        output.innerHTML = `
+<div class="resultCard">
+
+<b>LL(1) Parsing Steps</b>
+
+<table id="parseTable">
+
+<tr>
+<th>Step</th>
+<th>Stack</th>
+<th>Input</th>
+<th>Action</th>
+</tr>
+
+</table>
+
+</div>
+`;
+      }
+
+      function nextStep() {
+        if (stepIndex >= parseSteps.length) {
+          return;
+        }
+
+        let step = parseSteps[stepIndex];
+
+        let table = document.getElementById("parseTable");
+
+        let row = document.createElement("tr");
+
+        row.innerHTML = `
+<td>${stepIndex + 1}</td>
+<td>${step.stack}</td>
+<td>${step.input}</td>
+<td>${step.action}</td>
+`;
+
+        table.appendChild(row);
+
+        stepIndex++;
+      }
+
+      function startAuto() {
+        if (autoInterval) clearInterval(autoInterval);
+
+        autoInterval = setInterval(() => {
+          if (stepIndex >= parseSteps.length) {
+            clearInterval(autoInterval);
+            return;
+          }
+
+          nextStep();
+        }, 700);
+      }
+    </script>
+  </body>
+</html>
